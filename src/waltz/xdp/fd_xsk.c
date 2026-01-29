@@ -220,6 +220,9 @@ static int
 fd_xsk_setup_napi( fd_xsk_t *              xsk,
                    fd_xsk_params_t const * params ) {
     /* TODO: Finish */
+    (void)xsk;
+    (void)params;
+
     return 0;
 }
 

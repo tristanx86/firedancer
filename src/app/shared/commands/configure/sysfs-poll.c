@@ -39,7 +39,7 @@ init_perm ( fd_cap_chk_t   * chk,
 static void
 sysfs_net_set( char const * device,
                char const * setting,
-               uint         value ) {
+               ulong         value ) {
     char path[ PATH_MAX ];
     fd_cstr_printf_check( path, PATH_MAX, NULL, "/sys/class/net/%s/%s", device, setting );
     FD_LOG_NOTICE(( "RUN: `echo \"%u\" > %s`", value, path ));

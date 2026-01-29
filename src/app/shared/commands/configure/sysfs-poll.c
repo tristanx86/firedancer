@@ -42,8 +42,8 @@ sysfs_net_set( char const * device,
                ulong         value ) {
     char path[ PATH_MAX ];
     fd_cstr_printf_check( path, PATH_MAX, NULL, "/sys/class/net/%s/%s", device, setting );
-    FD_LOG_NOTICE(( "RUN: `echo \"%u\" > %s`", value, path ));
-    fd_file_util_write_uint( path, value );
+    FD_LOG_NOTICE(( "RUN: `echo \"%lu\" > %s`", value, path ));
+    fd_file_util_write_uint( path, (uint)value );
 }
 
 static void

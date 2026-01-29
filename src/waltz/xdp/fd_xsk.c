@@ -4,9 +4,6 @@
 
 #define _GNU_SOURCE /* MADV_DONTDUMP */
 
-/* 
-#define EPIOCSPARAMS _IOW('E', 0x02, fd_epoll_params_t)
-
 #include <errno.h>
 #include <stdio.h> /* snprintf */
 #include <unistd.h>
@@ -14,14 +11,13 @@
 #include <sys/types.h>
 #include <sys/socket.h> /* sendto */
 #include <sys/syscall.h> /* SYS_mlock */
-#include <sys/epoll.h> /* (X) */
-#include <sys.ioctl.h> /* ioctl, EPIOCSPARAMS (X) */
+#include <sys/ioctl.h> /* ioctl, EPIOCSPARAMS */
 #include <fcntl.h>
 #include "../../util/log/fd_log.h"
 #include "fd_xsk.h"
 
 /* Support for older kernels */
-
+ 
 #ifndef EPIOCSPARAMS
 #define EPIOCSPARAMS _IOW('E', 0x02, fd_epoll_params_t)
 #endif

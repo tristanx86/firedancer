@@ -1124,7 +1124,6 @@ net_rx_event( fd_net_ctx_t * ctx,
 
 static void
 before_credit_softirq( fd_net_ctx_t *      ctx,
-                       fd_stem_context_t * stem,
                        int *               charge_busy,
                        uint                rr_idx,
                        fd_xsk_t *          rr_xsk ) {
@@ -1148,13 +1147,12 @@ before_credit_softirq( fd_net_ctx_t *      ctx,
 
 static void
 before_credit_prefbusy( fd_net_ctx_t *      ctx,
-                        fd_stem_context_t * stem,
                         int *               charge_busy,
                         uint                rr_idx,
                         fd_xsk_t *          rr_xsk ) {
 
   if( FD_UNLIKELY( fd_xdp_ring_empty( &rr_xsk->ring_rx, FD_XDP_RING_ROLE_CONS )
-                || fd_xdp_ring_full( &rr_xsk->ring_tx, FD_XDP_RING_ROLE_CONS ) ) ) {
+                || fd_xdp_ring_full( &rr_xsk->ring_tx ) ) ) {
     /* Kernel needs to be kicked to process new TX from
        Firedancer's net tile and process new RX from the NIC.
        Note epoll processes both RX and TX. */
@@ -1223,10 +1221,10 @@ before_credit( fd_net_ctx_t *      ctx,
   fd_xsk_t * rr_xsk = &ctx->xsk[ rr_idx ];
 
   if( FD_LIKELY( rr_xsk->prefbusy_poll_enabled ) ) {
-      before_credit_prefbusy( ctx, stem, charge_busy, rr_idx, rr_xsk );
+      before_credit_prefbusy( ctx, charge_busy, rr_idx, rr_xsk );
   } else {
       /* fallback polling mode for systems using a linux version < v5.11 */
-      before_credit_softirq( ctx, stem, charge_busy, rr_idx, rr_xsk );
+      before_credit_softirq( ctx, charge_busy, rr_idx, rr_xsk );
   }
 
   /* Fire comp event if we have comp desc avail */

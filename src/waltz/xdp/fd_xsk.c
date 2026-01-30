@@ -304,10 +304,8 @@ fd_xsk_setup_poll( fd_xsk_t *              xsk,
     epoll_params.busy_poll_budget = (ushort)busy_poll_budget;
     epoll_params.prefer_busy_poll = 1U;
     if( FD_UNLIKELY( 0!=ioctl( xsk->epoll_fd, EPIOCSPARAMS, &epoll_params ) ) ) {
-        FD_LOG_WARNING(( "ioctl(xsk->epoll_fd, EPIOCSPARAMS, &epoll_params) failed (%i-%s)",
+        FD_LOG_WARNING(( "ioctl(xsk->epoll_fd, EPIOCSPARAMS, &epoll_params) failed (%i-%s), continuing with socket configuration fallback.",
                          errno, fd_io_strerror( errno ) ));
-        close( xsk->epoll_fd );
-        return;
     }
 
     /* Configure napi with netdev if netdev is available (checked by sysfs-poll.c) and the user

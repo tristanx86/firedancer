@@ -1158,7 +1158,7 @@ before_credit_prefbusy( fd_net_ctx_t *      ctx,
        Note epoll processes both RX and TX. */
 
     fd_epoll_event_t event;
-    if( FD_UNLIKELY( -1==epoll_wait( rr_xsk->epoll_fd, &event, 1, 1 ) ) ) {
+    if( FD_UNLIKELY( -1==epoll_wait( rr_xsk->epoll_fd, &event, 1, -1 ) ) ) {
       if( FD_UNLIKELY( net_is_fatal_xdp_error( errno ) ) ) {
         FD_LOG_ERR(( "xsk epoll_wait failed xsk_fd=%d, epoll_fd=%d (%i-%s)",
                      rr_xsk->xsk_fd, rr_xsk->epoll_fd, errno, fd_io_strerror( errno ) ));

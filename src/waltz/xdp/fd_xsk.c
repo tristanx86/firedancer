@@ -226,8 +226,8 @@ fd_xsk_setup_napi( fd_xsk_t *              xsk,
     return 0;
 }
 
-/* fd_xsk_setup_poll: Setup preferred busy polling if the user has set that to be
-   their preferred polling method */
+/* fd_xsk_setup_poll: Setup preferred busy polling if the user has
+   set that to be their preferred polling method */
 
 static void
 fd_xsk_setup_poll( fd_xsk_t *              xsk,
@@ -287,7 +287,7 @@ fd_xsk_setup_poll( fd_xsk_t *              xsk,
 
     /* Configure epoll instance event settings for edge triggered mode */
 
-    fd_epoll_event_t event_param; /* Note kernel makes its own copy of this param */
+    fd_epoll_event_t event_param;
     event_param.events   = EPOLLIN | EPOLLET;
     event_param.data.ptr = NULL; /* NULL to mean the listening socket */
     if( FD_UNLIKELY( 0!=epoll_ctl( xsk->epoll_fd, EPOLL_CTL_ADD, xsk->xsk_fd, &event_param ) ) ) {
@@ -297,19 +297,24 @@ fd_xsk_setup_poll( fd_xsk_t *              xsk,
         return;
     }
 
-    /* Configure epoll instance parameters */
+    /* Configure epoll instance parameters for prefbusy polling.
+       Without this epoll is just a spectator informing userspace
+       about events and not telling napi to poll the NIC driver. */
 
     fd_epoll_params_t epoll_params;
     epoll_params.busy_poll_usecs  = params->busy_poll_usecs;
     epoll_params.busy_poll_budget = (ushort)busy_poll_budget;
     epoll_params.prefer_busy_poll = 1U;
     if( FD_UNLIKELY( 0!=ioctl( xsk->epoll_fd, EPIOCSPARAMS, &epoll_params ) ) ) {
-        FD_LOG_WARNING(( "ioctl(xsk->epoll_fd, EPIOCSPARAMS, &epoll_params) failed (%i-%s), continuing with socket configuration fallback.",
+        FD_LOG_WARNING(( "ioctl(xsk->epoll_fd, EPIOCSPARAMS, &epoll_params) failed (%i-%s), switching to less performant fallback softirq based polling, likely due to being on a linux kernel older than v6.13.",
                          errno, fd_io_strerror( errno ) ));
+        close( xsk->epoll_fd );
+        return;
     }
 
-    /* Configure napi with netdev if netdev is available (checked by sysfs-poll.c) and the user
-       has netdev based configuration for preferred busy polling enabled */
+    /* Configure napi with netdev if netdev is available (checked
+       by sysfs-poll.c) and the user has netdev based configuration
+       for preferred busy polling enabled */
 
     if( FD_UNLIKELY( 0!=fd_xsk_setup_napi( xsk, params ) ) ) {
         FD_LOG_WARNING(( "fd_xsk_setup_napi(xsk) failed" ));

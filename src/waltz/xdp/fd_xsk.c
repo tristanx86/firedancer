@@ -301,7 +301,7 @@ fd_xsk_setup_poll( fd_xsk_t *              xsk,
        Without this epoll is just a spectator informing userspace
        about events and not telling napi to poll the NIC driver. */
 
-    fd_epoll_params_t epoll_params;
+    fd_epoll_params_t epoll_params = {0};
     epoll_params.busy_poll_usecs  = params->busy_poll_usecs;
     epoll_params.busy_poll_budget = (ushort)busy_poll_budget;
     epoll_params.prefer_busy_poll = 1U;

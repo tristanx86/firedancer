@@ -253,8 +253,8 @@ fd_xsk_setup_poll( fd_xsk_t *              xsk,
       return;
     }
 
-    uint busy_poll_budget = (uint)fd_ulong_min( fd_ulong_min( params->fr_depth, params->rx_depth ), 
-                                                fd_ulong_min( params->tx_depth, params->cr_depth ) );
+    /* Max busy_poll_budget can be is 64 */
+    uint busy_poll_budget = 64U;
     if( FD_UNLIKELY( 0!=setsockopt( xsk->xsk_fd, SOL_SOCKET, SO_BUSY_POLL_BUDGET, &busy_poll_budget, sizeof(uint) ) ) ) {
       FD_LOG_WARNING(( "setsockopt(xsk_fd,SOL_SOCKET,SO_BUSY_POLL_BUDGET,%u) failed (%i-%s)",
                        busy_poll_budget, errno, fd_io_strerror( errno ) ));

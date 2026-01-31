@@ -1151,8 +1151,10 @@ before_credit_prefbusy( fd_net_ctx_t *      ctx,
                         uint                rr_idx,
                         fd_xsk_t *          rr_xsk ) {
 
-  if( FD_UNLIKELY( fd_xdp_ring_empty( &rr_xsk->ring_rx, FD_XDP_RING_ROLE_CONS )
-                || fd_xdp_ring_full( &rr_xsk->ring_tx ) ) ) {
+  /* if( FD_UNLIKELY( fd_xdp_ring_empty( &rr_xsk->ring_rx, FD_XDP_RING_ROLE_CONS )
+                || fd_xdp_ring_full( &rr_xsk->ring_tx ) ) ) {*/
+  /* For testing just TX */
+  if( FD_UNLIKELY( fd_xdp_ring_full( &rr_xsk->ring_tx ) ) )
     /* Kernel needs to be kicked to process new TX from
        Firedancer's net tile and process new RX from the NIC.
        Note epoll processes both RX and TX. */

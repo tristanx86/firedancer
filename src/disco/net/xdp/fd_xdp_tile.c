@@ -95,10 +95,19 @@ struct fd_net_flusher {
      wakeup.  This can result in the tail of a burst getting delayed or
      overrun.  If more than tail_flush_backoff ticks pass since the last
      sendto() wakeup and there are still unacknowledged packets in the
-     TX ring, issues another wakeup. */
+     TX ring, issues another wakeup. Only used by sofitrq poll mode. */
   long next_tail_flush_ticks;
   long tail_flush_backoff;
 
+  /* This upper/lower bound timer mechanism is only used for prefbusy
+     poll mode and is an extra precaution to ensure epoll_wait() is not
+     called too frequently such that the syscall overhead of epoll becomes
+     a livelock problem, and called frequently enough that even in edge case
+     ring fullness scenarios packets will still be sent and received to/from
+     napi. */
+  long last_epoll_ticks;
+  long lwr_epoll_ticks;
+  long upr_epoll_ticks;
 };
 
 typedef struct fd_net_flusher fd_net_flusher_t;
@@ -1141,6 +1150,44 @@ before_credit_softirq( fd_net_ctx_t *      ctx,
   }
 }
 
+/* net_epoll_ready returns 1 if prefbusy poll mode should
+   issue an epoll immediately. Timer lower bound is necessary
+   so epoll_wait() is not called too frequently in
+   a low RX but high TX scenario FD, as without it
+   FD could be livelocked from being able to add enough 
+   packets to the TX ring due to significant epoll_wait()
+   syscall overhead from RX being low leading to the RX
+   ring being empty extremely often. Timer upper bound
+   is an extra precaution and is not intended to be the
+   main epoll driver, RX being empty and TX being past the 
+   watermark level are. */
+
+static int
+net_epoll_ready( fd_net_ctx_t *      ctx,
+                 uint                rr_idx,
+                 fd_xsk_t *          rr_xsk ) {
+  fd_net_flusher_t * flusher = ctx->tx_flusher+rr_idx;
+
+  if( FD_UNLIKELY( fd_tickcount() < ( flusher->last_epoll_ticks + flusher->lwr_epoll_ticks ) ) ) return 0;
+  if( FD_UNLIKELY( fd_tickcount() > ( flusher->last_epoll_ticks + flusher->upr_epoll_ticks ) ) ) return 1;
+
+  if( FD_UNLIKELY( fd_xdp_ring_empty( &rr_xsk->ring_tx, FD_XDP_RING_ROLE_PROD ) ) ) {
+    flusher->pending_cnt = 0UL;
+  }
+
+  int tx_flush_level = flusher->pending_cnt >= flusher->pending_wmark;
+  int rx_empty       = fd_xdp_ring_empty( &rr_sxk->ring_rx, FD_XDP_RING_ROLE_CONS );
+
+  return rx_empty || tx_flush_level;
+}
+
+static void
+net_epoll_flush( fd_net_flusher_t * flusher,
+                 long               now ) {
+  flusher->pending_cnt = 0UL;
+  flusher->last_epoll_ticks = now;
+}
+
 /* before_credit_prefbusy is called every loop iteration if net
    tile is in preferred busy (often referred to as prefbusy in
    Firedancer) polling mode. */
@@ -1154,7 +1201,7 @@ before_credit_prefbusy( fd_net_ctx_t *      ctx,
   /* if( FD_UNLIKELY( fd_xdp_ring_empty( &rr_xsk->ring_rx, FD_XDP_RING_ROLE_CONS )
                 || fd_xdp_ring_full( &rr_xsk->ring_tx ) ) ) {*/
   /* For testing just TX */
-  if( FD_UNLIKELY( fd_xdp_ring_full( &rr_xsk->ring_tx ) ) ) {
+  if( FD_UNLIKELY( net_epoll_ready( ctx, rr_idx, rr_xsk ) ) {
     /* Kernel needs to be kicked to process new TX from
        Firedancer's net tile and process new RX from the NIC.
        Note epoll processes both RX and TX. */
@@ -1175,9 +1222,9 @@ before_credit_prefbusy( fd_net_ctx_t *      ctx,
       }
     }
 
-    fd_net_flusher_wakeup( ctx->tx_flusher+rr_idx, fd_tickcount() );
+    net_epoll_flush( ctx->tx_flusher+rr_idx, fd_tickcount() );
 
-    /* Since epoll handles both rx and tx both are incremented */
+    /* Since epoll drives both rx and tx, both are incremented */
     ctx->metrics.xsk_tx_wakeup_cnt++;
     ctx->metrics.xsk_rx_wakeup_cnt++;
   }
@@ -1580,6 +1627,9 @@ unprivileged_init( fd_topo_t *      topo,
     ctx->tx_flusher[ j ].pending_wmark         = (ulong)( (double)tile->xdp.xdp_tx_queue_size * 0.7 );
     ctx->tx_flusher[ j ].tail_flush_backoff    = (long)( (double)tile->xdp.tx_flush_timeout_ns * fd_tempo_tick_per_ns( NULL ) );
     ctx->tx_flusher[ j ].next_tail_flush_ticks = LONG_MAX;
+    ctx->tx_flusher[ j ].last_epoll_ticks      = 0UL;
+    ctx->tx_flusher[ j ].lwr_epoll_ticks       = (long)( (double)tile->xdp.lwr_epoll_timeout_ns * fd_tempo_tick_per_ns( NULL ) );
+    ctx->tx_flusher[ j ].upr_epoll_ticks       = (long)( (double)tile->xdp.upr_epoll_timeout_ns * fd_tempo_tick_per_ns( NULL ) );
   }
 
   /* Join netbase objects */

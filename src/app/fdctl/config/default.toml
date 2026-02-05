@@ -962,9 +962,11 @@ dynamic_port_range = "8900-9000"
         # do before merging prefer busy polling PR. These numbers are
         # currently just magic numbers which seems resonable, will
         # tune, justify and set properly prior to merging PR too.
-        poll_mode               = "prefbusy"
-        busy_poll_usecs         = 100
-        gro_flush_timeout_nanos = 100000
+        poll_mode                = "prefbusy"
+        busy_poll_usecs          = 1000
+        gro_flush_timeout_nanos  = 5000000
+        lwr_epoll_timeout_micros = 5
+        upr_epoll_timeout_micros = 100
 
         # XDP uses metadata queues shared across the kernel and
         # userspace to relay events about incoming and outgoing packets.

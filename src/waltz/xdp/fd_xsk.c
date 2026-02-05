@@ -19,7 +19,8 @@
 /* Support for older kernels */
  
 #ifndef EPIOCSPARAMS
-#define EPIOCSPARAMS _IOW('E', 0x02, fd_epoll_params_t)
+#define EPOLL_IOC_TYPE 0x8A
+#define EPIOCSPARAMS _IOW(EPOLL_IOC_TYPE, 0x01, fd_epoll_params_t)
 #endif
 
 #ifndef SO_BUSY_POLL

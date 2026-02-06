@@ -1148,12 +1148,14 @@ before_credit_softirq( fd_net_ctx_t *      ctx,
     ctx->rr_idx++;
     ctx->rr_idx = fd_uint_if( ctx->rr_idx>=ctx->xsk_cnt, 0, ctx->rr_idx );
   }
+
+
 }
 
 /* net_epoll_ready returns 1 if prefbusy poll mode should
    issue an epoll immediately. Timer lower bound is necessary
    so epoll_wait() is not called too frequently in
-   a low RX but high TX scenario FD, as without it
+   a low RX but high TX scenario, as without it
    FD could be livelocked from being able to add enough 
    packets to the TX ring due to significant epoll_wait()
    syscall overhead from RX being low leading to the RX
@@ -1176,7 +1178,7 @@ net_epoll_ready( fd_net_ctx_t *      ctx,
   }
 
   int tx_flush_level = flusher->pending_cnt >= flusher->pending_wmark;
-  int rx_empty       = fd_xdp_ring_empty( &rr_sxk->ring_rx, FD_XDP_RING_ROLE_CONS );
+  int rx_empty       = fd_xdp_ring_empty( &rr_xsk->ring_rx, FD_XDP_RING_ROLE_CONS );
 
   return rx_empty || tx_flush_level;
 }
@@ -1201,7 +1203,7 @@ before_credit_prefbusy( fd_net_ctx_t *      ctx,
   /* if( FD_UNLIKELY( fd_xdp_ring_empty( &rr_xsk->ring_rx, FD_XDP_RING_ROLE_CONS )
                 || fd_xdp_ring_full( &rr_xsk->ring_tx ) ) ) {*/
   /* For testing just TX */
-  if( FD_UNLIKELY( net_epoll_ready( ctx, rr_idx, rr_xsk ) ) {
+  if( FD_UNLIKELY( net_epoll_ready( ctx, rr_idx, rr_xsk ) ) ) {
     /* Kernel needs to be kicked to process new TX from
        Firedancer's net tile and process new RX from the NIC.
        Note epoll processes both RX and TX. */
@@ -1236,10 +1238,9 @@ before_credit_prefbusy( fd_net_ctx_t *      ctx,
   if( !fd_xdp_ring_empty( &rr_xsk->ring_rx, FD_XDP_RING_ROLE_CONS ) ) {
     *charge_busy = 1;
     net_rx_event( ctx, rr_xsk, rr_xsk->ring_rx.cached_cons );
-  } else {
-    ctx->rr_idx++;
-    ctx->rr_idx = fd_uint_if( ctx->rr_idx>=ctx->xsk_cnt, 0, ctx->rr_idx );
   }
+  ctx->rr_idx++;
+  ctx->rr_idx = fd_uint_if( ctx->rr_idx>=ctx->xsk_cnt, 0, ctx->rr_idx );
 }
 
 

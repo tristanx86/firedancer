@@ -1224,20 +1224,20 @@ before_credit_prefbusy( fd_net_ctx_t *      ctx,
       }
     }*/
 
-    FD_VOLATILE( *xsk->ring_tx.prod ) = xsk->ring_tx.cached_prod; /* write-back local copies to fseqs */
-    FD_VOLATILE( *xsk->ring_cr.cons ) = xsk->ring_cr.cached_cons;
-    FD_VOLATILE( *xsk->ring_rx.cons ) = xsk->ring_rx.cached_cons;
-    FD_VOLATILE( *xsk->ring_fr.prod ) = xsk->ring_fr.cached_prod;
+    FD_VOLATILE( *rr_xsk->ring_tx.prod ) = rr_xsk->ring_tx.cached_prod; /* write-back local copies to fseqs */
+    FD_VOLATILE( *rr_xsk->ring_cr.cons ) = rr_xsk->ring_cr.cached_cons;
+    FD_VOLATILE( *rr_xsk->ring_rx.cons ) = rr_xsk->ring_rx.cached_cons;
+    FD_VOLATILE( *rr_xsk->ring_fr.prod ) = rr_xsk->ring_fr.cached_prod;
     *charge_busy = 1;
-    if( FD_UNLIKELY( -1==sendto( xsk->xsk_fd, NULL, 0, MSG_DONTWAIT, NULL, 0 ) ) ) {
+    if( FD_UNLIKELY( -1==sendto( rr_xsk->xsk_fd, NULL, 0, MSG_DONTWAIT, NULL, 0 ) ) ) {
       if( FD_UNLIKELY( net_is_fatal_xdp_error( errno ) ) ) {
-        FD_LOG_ERR(( "xsk sendto failed xsk_fd=%d (%i-%s)", xsk->xsk_fd, errno, fd_io_strerror( errno ) ));
+        FD_LOG_ERR(( "xsk sendto failed xsk_fd=%d (%i-%s)", rr_xsk->xsk_fd, errno, fd_io_strerror( errno ) ));
       }
       if( FD_UNLIKELY( errno!=EAGAIN ) ) {
         long ts = fd_log_wallclock();
         if( ts > xsk->log_suppress_until_ns ) {
-          FD_LOG_WARNING(( "xsk sendto failed xsk_fd=%d (%i-%s)", xsk->xsk_fd, errno, fd_io_strerror( errno ) ));
-          xsk->log_suppress_until_ns = ts + (long)1e9;
+          FD_LOG_WARNING(( "xsk sendto failed xsk_fd=%d (%i-%s)", rr_xsk->xsk_fd, errno, fd_io_strerror( errno ) ));
+          rr_xsk->log_suppress_until_ns = ts + (long)1e9;
         }
       }
     }

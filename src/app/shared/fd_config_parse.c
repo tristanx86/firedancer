@@ -176,8 +176,8 @@ fd_config_extract_pod( uchar *       pod,
   CFG_POP      ( cstr,   net.xdp.poll_mode                                );
   CFG_POP      ( uint,   net.xdp.busy_poll_usecs                          );
   CFG_POP      ( ulong,  net.xdp.gro_flush_timeout_nanos                  );
-  CFG_POP      ( long,   net.xdp.lwr_epoll_timeout_micros                 );
-  CFG_POP      ( long,   net.xdp.upr_epoll_timeout_micros                 );
+  CFG_POP      ( uint,   net.xdp.lwr_epoll_timeout_micros                 );
+  CFG_POP      ( uint,   net.xdp.upr_epoll_timeout_micros                 );
   CFG_POP      ( uint,   net.xdp.xdp_rx_queue_size                        );
   CFG_POP      ( uint,   net.xdp.xdp_tx_queue_size                        );
   CFG_POP      ( uint,   net.xdp.flush_timeout_micros                     );

@@ -289,7 +289,7 @@ fd_xsk_setup_poll( fd_xsk_t *              xsk,
     /* Configure epoll instance event settings for edge triggered mode */
 
     fd_epoll_event_t event_param;
-    event_param.events   = EPOLLIN | EPOLLOUT;
+    event_param.events   = EPOLLIN;
     event_param.data.ptr = NULL; /* NULL to mean the listening socket */
     if( FD_UNLIKELY( 0!=epoll_ctl( xsk->epoll_fd, EPOLL_CTL_ADD, xsk->xsk_fd, &event_param ) ) ) {
         FD_LOG_WARNING(( "epoll_ctl(xsk->epoll_fd, EPOLL_CTL_ADD, xsk->xsk_fd, &event_param) failed (%i-%s)",

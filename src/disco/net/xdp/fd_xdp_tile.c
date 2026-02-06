@@ -1235,7 +1235,7 @@ before_credit_prefbusy( fd_net_ctx_t *      ctx,
       }
       if( FD_UNLIKELY( errno!=EAGAIN ) ) {
         long ts = fd_log_wallclock();
-        if( ts > xsk->log_suppress_until_ns ) {
+        if( ts > rr_xsk->log_suppress_until_ns ) {
           FD_LOG_WARNING(( "xsk sendto failed xsk_fd=%d (%i-%s)", rr_xsk->xsk_fd, errno, fd_io_strerror( errno ) ));
           rr_xsk->log_suppress_until_ns = ts + (long)1e9;
         }

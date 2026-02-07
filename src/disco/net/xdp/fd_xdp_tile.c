@@ -8,6 +8,7 @@
 #include <fcntl.h>
 #include <net/if.h>
 #include <netinet/in.h>
+#include <time.h> /* timespec used for epoll_pwait2() */
 #include <sys/socket.h> /* MSG_DONTWAIT needed before importing the net seccomp filter */
 #include <linux/if_xdp.h>
 
@@ -1178,7 +1179,7 @@ net_epoll_ready( fd_net_ctx_t *      ctx,
   }
 
   /* int tx_flush_level = flusher->pending_cnt >= flusher->pending_wmark; */
-  int rx_empty       = fd_xdp_ring_empty( &rr_xsk->ring_rx, FD_XDP_RING_ROLE_CONS );
+  int rx_empty = fd_xdp_ring_empty( &rr_xsk->ring_rx, FD_XDP_RING_ROLE_CONS );
 
   return rx_empty;
 }
@@ -1200,35 +1201,37 @@ before_credit_prefbusy( fd_net_ctx_t *      ctx,
                         uint                rr_idx,
                         fd_xsk_t *          rr_xsk ) {
 
-  /* if( FD_UNLIKELY( fd_xdp_ring_empty( &rr_xsk->ring_rx, FD_XDP_RING_ROLE_CONS )
-                || fd_xdp_ring_full( &rr_xsk->ring_tx ) ) ) {*/
-  /* For testing just TX */
   if( FD_UNLIKELY( net_epoll_ready( ctx, rr_idx, rr_xsk ) ) ) {
     /* Kernel needs to be kicked to process new TX from
        Firedancer's net tile and process new RX from the NIC.
        Note epoll processes both RX and TX. */
 
-    /*fd_epoll_event_t event;
-    if( FD_UNLIKELY( -1==epoll_wait( rr_xsk->epoll_fd, &event, 1, 1 ) ) ) {
+    FD_VOLATILE( *rr_xsk->ring_tx.prod ) = rr_xsk->ring_tx.cached_prod; /* write-back local copies to fseqs */
+    FD_VOLATILE( *rr_xsk->ring_cr.cons ) = rr_xsk->ring_cr.cached_cons;
+    FD_VOLATILE( *rr_xsk->ring_rx.cons ) = rr_xsk->ring_rx.cached_cons;
+    FD_VOLATILE( *rr_xsk->ring_fr.prod ) = rr_xsk->ring_fr.cached_prod;
+
+    fd_epoll_event_t      event;
+    struct timespec epoll_timeout;
+    epoll_timeout.tv_sec  = 0;
+    epoll_timeout.tv_nsec = 1000;
+
+    if( FD_UNLIKELY( -1==epoll_pwait2( rr_xsk->epoll_fd, &event, 1, &epoll_timeout, NULL ) ) ) {
       if( FD_UNLIKELY( net_is_fatal_xdp_error( errno ) ) ) {
-        FD_LOG_ERR(( "xsk epoll_wait failed xsk_fd=%d, epoll_fd=%d (%i-%s)",
+        FD_LOG_ERR(( "xsk epoll_pwait2 failed xsk_fd=%d, epoll_fd=%d (%i-%s)",
                      rr_xsk->xsk_fd, rr_xsk->epoll_fd, errno, fd_io_strerror( errno ) ));
       }
       if( FD_UNLIKELY( errno!=EAGAIN ) ) {
         long ts = fd_log_wallclock();
         if( ts > rr_xsk->log_suppress_until_ns ) {
-          FD_LOG_WARNING(( "xsk epoll_wait failed xsk_fd=%d, epoll_fd=%d (%i-%s)",
+          FD_LOG_WARNING(( "xsk epoll_pwait2 failed xsk_fd=%d, epoll_fd=%d (%i-%s)",
                            rr_xsk->xsk_fd, rr_xsk->epoll_fd, errno, fd_io_strerror( errno ) ));
           rr_xsk->log_suppress_until_ns = ts + (long)1e9;
         }
       }
-    }*/
+    }
 
-    FD_VOLATILE( *rr_xsk->ring_tx.prod ) = rr_xsk->ring_tx.cached_prod; /* write-back local copies to fseqs */
-    FD_VOLATILE( *rr_xsk->ring_cr.cons ) = rr_xsk->ring_cr.cached_cons;
-    FD_VOLATILE( *rr_xsk->ring_rx.cons ) = rr_xsk->ring_rx.cached_cons;
-    FD_VOLATILE( *rr_xsk->ring_fr.prod ) = rr_xsk->ring_fr.cached_prod;
-    *charge_busy = 1;
+    /* *charge_busy = 1;
     if( FD_UNLIKELY( -1==sendto( rr_xsk->xsk_fd, NULL, 0, MSG_DONTWAIT, NULL, 0 ) ) ) {
       if( FD_UNLIKELY( net_is_fatal_xdp_error( errno ) ) ) {
         FD_LOG_ERR(( "xsk sendto failed xsk_fd=%d (%i-%s)", rr_xsk->xsk_fd, errno, fd_io_strerror( errno ) ));
@@ -1240,7 +1243,7 @@ before_credit_prefbusy( fd_net_ctx_t *      ctx,
           rr_xsk->log_suppress_until_ns = ts + (long)1e9;
         }
       }
-    }
+    } */
 
     net_epoll_flush( ctx->tx_flusher+rr_idx, fd_tickcount() );
 

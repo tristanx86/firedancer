@@ -85,6 +85,7 @@ fd_xdp_gen_program( ulong          code_buf[ 512 ],
 
   #define LBL_GRE_CHECK     3   // Ethernet-->IPV4-->GRE-->Inner IPV4-->UDP
   #define LBL_UDP_CHECK     4   // Ethernet-->IPV4-->UDP
+  #define LBL_VLAN_SKIP     5   // Skip advancing of r2 & r5 by a 4 byte offset (size of a single VLAN)
 
   if( FD_UNLIKELY( ports_cnt>16UL ) ) {
     FD_LOG_ERR(( "Too many XDP UDP ports (%lu)", ports_cnt ));
@@ -95,11 +96,21 @@ fd_xdp_gen_program( ulong          code_buf[ 512 ],
   *(code++) = FD_EBPF( ldxw, r3, r1, 4                          );  // r3 = xdp_md->data_end
 
   *(code++) = FD_EBPF( mov64_reg, r5, r2                        );
-  *(code++) = FD_EBPF( add64_imm, r5, 34                        );  // Bound check accessing the eth_hdr (14 bytes) and the ip4_hdr (20 bytes)
-  *(code++) = FD_EBPF( jgt_reg, r5, r3, LBL_PASS                );  // if r2+34 > r3 goto LBL_PASS
+  *(code++) = FD_EBPF( add64_imm, r5, 38                        );  // Bound check accessing the eth_hdr (14 bytes) and the ip4_hdr (20 bytes) and possibly a vln_hdr (4 bytes)
+  *(code++) = FD_EBPF( jgt_reg, r5, r3, LBL_PASS                );  // if r2+38 > r3 goto LBL_PASS
 
   *(code++) = FD_EBPF( ldxh, r5, r2, 12                         );
-  *(code++) = FD_EBPF( jne_imm, r5, 0x0008, LBL_PASS            );  // if eth_hdr->net_type != IP4 goto LBL_PASS
+  *(code++) = FD_EBPF( jne_imm, r5, 0x8100, LBL_VLAN_SKIP       ); // if eth_hdr does not have optional VLAN tag (802.1q tag), skip VLAN offset advance
+
+  /*if eth_hdr contains VLAN tag, advance r5 and r2 to the start of eth_hdr->net_type */ 
+  *(code++) = FD_EBPF( add64_imm, r2, 4                         );
+  *(code++) = FD_EBPF( ldxh, r5, r2, 12                         );
+
+  /* vlan skip */
+  ulong * vlan_skip = code;
+
+  /* if eth_hdr->net_type != IP4 goto LBL_PASS */
+  *(code++) = FD_EBPF( jne_imm, r5, 0x0008, LBL_PASS            ); 
 
   /* Advance r2 to the start of first ip4_hdr */
   *(code++) = FD_EBPF( add64_imm, r2, 14                        );
@@ -227,6 +238,7 @@ fd_xdp_gen_program( ulong          code_buf[ 512 ],
       case LBL_REDIRECT:  jmp_target = lbl_redirect; break;
       case LBL_GRE_CHECK: jmp_target = gre_check;    break;
       case LBL_UDP_CHECK: jmp_target = udp_check;    break;
+      case LBL_VLAN_SKIP: jmp_target = vlan_skip;    break;
       default: FD_LOG_ERR(( "Invalid jump instruction (%016lx)", fd_ulong_bswap( code_buf[ i ] ) ));
       }
       long   off   = jmp_target-code_buf-(long)i-1;

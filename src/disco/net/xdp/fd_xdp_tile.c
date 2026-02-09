@@ -1166,10 +1166,9 @@ before_credit_softirq( fd_net_ctx_t *      ctx,
    watermark level are. */
 
 static int
-net_epoll_ready( fd_net_ctx_t *      ctx,
-                 uint                rr_idx,
-                 fd_xsk_t *          rr_xsk ) {
-  fd_net_flusher_t * flusher = ctx->tx_flusher+rr_idx;
+net_epoll_ready( fd_xsk_t *         rr_xsk,
+                 fd_net_flusher_t * flusher ) {
+  
 
   if( FD_UNLIKELY( fd_tickcount() < ( flusher->last_epoll_ticks + flusher->lwr_epoll_ticks ) ) ) return 0;
   if( FD_UNLIKELY( fd_tickcount() > ( flusher->last_epoll_ticks + flusher->upr_epoll_ticks ) ) ) return 1;
@@ -1201,7 +1200,8 @@ before_credit_prefbusy( fd_net_ctx_t *      ctx,
                         uint                rr_idx,
                         fd_xsk_t *          rr_xsk ) {
 
-  if( FD_UNLIKELY( net_epoll_ready( ctx, rr_idx, rr_xsk ) ) ) {
+  fd_net_flusher_t * flusher = ctx->tx_flusher+rr_idx;
+  if( FD_UNLIKELY( net_epoll_ready( rr_xsk, flusher ) ) ) {
     /* Kernel needs to be kicked to process new TX from
        Firedancer's net tile and process new RX from the NIC.
        Note epoll processes both RX and TX. */
@@ -1211,12 +1211,41 @@ before_credit_prefbusy( fd_net_ctx_t *      ctx,
     FD_VOLATILE( *rr_xsk->ring_rx.cons ) = rr_xsk->ring_rx.cached_cons;
     FD_VOLATILE( *rr_xsk->ring_fr.prod ) = rr_xsk->ring_fr.cached_prod;
 
-    fd_epoll_event_t      event;
-    struct timespec epoll_timeout;
+    fd_epoll_event_t event;
+    struct timespec  epoll_timeout;
+
     epoll_timeout.tv_sec  = 0;
     epoll_timeout.tv_nsec = 1000;
 
-    if( FD_UNLIKELY( -1==epoll_pwait2( rr_xsk->epoll_fd, &event, 1, &epoll_timeout, NULL ) ) ) {
+    int res = epoll_pwait2( rr_xsk->epoll_fd, &event, 1, &epoll_timeout, NULL );
+    if( FD_UNLIKELY( 0==res ) ) {
+      /* No events found by epoll */
+      
+      if( FD_LIKELY( flusher->pending_cnt > 0UL ) ) {
+        /* If there are TX pending in the xsk ring, call sendto to ensure
+           they still get sent even if event poll didn't poll napi, the
+           first time epoll is called and there is no RX in the hw RX ring
+           napi is still polled and TX sent, however after that until new
+           RX arrives at the hw RX ring, calling epoll will not poll napi
+           and send the TX. This code therefore ensures in a low RX (or,
+           even 0 RX) scenario, TX will still work fine. */
+
+        if( FD_UNLIKELY( -1==sendto( rr_xsk->xsk_fd, NULL, 0, MSG_DONTWAIT, NULL, 0 ) ) ) {
+          if( FD_UNLIKELY( net_is_fatal_xdp_error( errno ) ) ) {
+            FD_LOG_ERR(( "xsk sendto failed xsk_fd=%d (%i-%s)", rr_xsk->xsk_fd, errno, fd_io_strerror( errno ) ));
+          }
+          if( FD_UNLIKELY( errno!=EAGAIN ) ) {
+            long ts = fd_log_wallclock();
+            if( ts > rr_xsk->log_suppress_until_ns ) {
+              FD_LOG_WARNING(( "xsk sendto failed xsk_fd=%d (%i-%s)", rr_xsk->xsk_fd, errno, fd_io_strerror( errno ) ));
+              rr_xsk->log_suppress_until_ns = ts + (long)1e9;
+            }
+          }
+        }
+      }
+    } else if( FD_UNLIKELY( -1==res ) ) {
+      /* Epoll error case */
+
       if( FD_UNLIKELY( net_is_fatal_xdp_error( errno ) ) ) {
         FD_LOG_ERR(( "xsk epoll_pwait2 failed xsk_fd=%d, epoll_fd=%d (%i-%s)",
                      rr_xsk->xsk_fd, rr_xsk->epoll_fd, errno, fd_io_strerror( errno ) ));
@@ -1231,21 +1260,7 @@ before_credit_prefbusy( fd_net_ctx_t *      ctx,
       }
     }
 
-    /* *charge_busy = 1;
-    if( FD_UNLIKELY( -1==sendto( rr_xsk->xsk_fd, NULL, 0, MSG_DONTWAIT, NULL, 0 ) ) ) {
-      if( FD_UNLIKELY( net_is_fatal_xdp_error( errno ) ) ) {
-        FD_LOG_ERR(( "xsk sendto failed xsk_fd=%d (%i-%s)", rr_xsk->xsk_fd, errno, fd_io_strerror( errno ) ));
-      }
-      if( FD_UNLIKELY( errno!=EAGAIN ) ) {
-        long ts = fd_log_wallclock();
-        if( ts > rr_xsk->log_suppress_until_ns ) {
-          FD_LOG_WARNING(( "xsk sendto failed xsk_fd=%d (%i-%s)", rr_xsk->xsk_fd, errno, fd_io_strerror( errno ) ));
-          rr_xsk->log_suppress_until_ns = ts + (long)1e9;
-        }
-      }
-    } */
-
-    net_epoll_flush( ctx->tx_flusher+rr_idx, fd_tickcount() );
+    net_epoll_flush( flusher, fd_tickcount() );
 
     /* Since epoll drives both rx and tx, both are incremented */
     ctx->metrics.xsk_tx_wakeup_cnt++;

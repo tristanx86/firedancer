@@ -1215,7 +1215,7 @@ before_credit_prefbusy( fd_net_ctx_t *      ctx,
     struct timespec  epoll_timeout;
 
     epoll_timeout.tv_sec  = 0;
-    epoll_timeout.tv_nsec = 1000;
+    epoll_timeout.tv_nsec = 100;
 
     int res = epoll_pwait2( rr_xsk->epoll_fd, &event, 1, &epoll_timeout, NULL );
     if( FD_UNLIKELY( 0==res ) ) {

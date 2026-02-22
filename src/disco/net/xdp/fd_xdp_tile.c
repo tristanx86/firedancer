@@ -1211,55 +1211,18 @@ before_credit_prefbusy( fd_net_ctx_t *      ctx,
     FD_VOLATILE( *rr_xsk->ring_rx.cons ) = rr_xsk->ring_rx.cached_cons;
     FD_VOLATILE( *rr_xsk->ring_fr.prod ) = rr_xsk->ring_fr.cached_prod;
 
-    fd_epoll_event_t event;
-    struct timespec  epoll_timeout;
-
-    epoll_timeout.tv_sec  = 0;
-    epoll_timeout.tv_nsec = 1;
-
-    int res = epoll_pwait2( rr_xsk->epoll_fd, &event, 1, &epoll_timeout, NULL );
-    if( FD_UNLIKELY( 0==res ) ) {
-      /* No events found by epoll */
-      
-      if( FD_LIKELY( flusher->pending_cnt > 0UL ) ) {
-        /* If there are TX pending in the xsk ring, call sendto to ensure
-           they still get sent even if event poll didn't poll napi, the
-           first time epoll is called and there is no RX in the hw RX ring
-           napi is still polled and TX sent, however after that until new
-           RX arrives at the hw RX ring, calling epoll will not poll napi
-           and send the TX. This code therefore ensures in a low RX (or,
-           even 0 RX) scenario, TX will still work fine. */
-
-        if( FD_UNLIKELY( -1==sendto( rr_xsk->xsk_fd, NULL, 0, MSG_DONTWAIT, NULL, 0 ) ) ) {
-          if( FD_UNLIKELY( net_is_fatal_xdp_error( errno ) ) ) {
-            FD_LOG_ERR(( "xsk sendto failed xsk_fd=%d (%i-%s)", rr_xsk->xsk_fd, errno, fd_io_strerror( errno ) ));
-          }
-          if( FD_UNLIKELY( errno!=EAGAIN ) ) {
-            long ts = fd_log_wallclock();
-            if( ts > rr_xsk->log_suppress_until_ns ) {
-              FD_LOG_WARNING(( "xsk sendto failed xsk_fd=%d (%i-%s)", rr_xsk->xsk_fd, errno, fd_io_strerror( errno ) ));
-              rr_xsk->log_suppress_until_ns = ts + (long)1e9;
-            }
-          }
-        }
-      }
-    } else if( FD_UNLIKELY( -1==res ) ) {
-      /* Epoll error case */
-
+    if( FD_UNLIKELY( -1==sendto( rr_xsk->xsk_fd, NULL, 0, MSG_DONTWAIT, NULL, 0 ) ) ) {
       if( FD_UNLIKELY( net_is_fatal_xdp_error( errno ) ) ) {
-        FD_LOG_ERR(( "xsk epoll_pwait2 failed xsk_fd=%d, epoll_fd=%d (%i-%s)",
-                     rr_xsk->xsk_fd, rr_xsk->epoll_fd, errno, fd_io_strerror( errno ) ));
+        FD_LOG_ERR(( "xsk sendto failed xsk_fd=%d (%i-%s)", rr_xsk->xsk_fd, errno, fd_io_strerror( errno ) ));
       }
       if( FD_UNLIKELY( errno!=EAGAIN ) ) {
         long ts = fd_log_wallclock();
         if( ts > rr_xsk->log_suppress_until_ns ) {
-          FD_LOG_WARNING(( "xsk epoll_pwait2 failed xsk_fd=%d, epoll_fd=%d (%i-%s)",
-                           rr_xsk->xsk_fd, rr_xsk->epoll_fd, errno, fd_io_strerror( errno ) ));
+          FD_LOG_WARNING(( "xsk sendto failed xsk_fd=%d (%i-%s)", rr_xsk->xsk_fd, errno, fd_io_strerror( errno ) ));
           rr_xsk->log_suppress_until_ns = ts + (long)1e9;
         }
       }
     }
-
     net_epoll_flush( flusher, fd_tickcount() );
 
     /* Since epoll drives both rx and tx, both are incremented */

@@ -283,7 +283,6 @@ fd_xsk_setup_poll( fd_xsk_t *              xsk,
     if( FD_UNLIKELY( xsk->epoll_fd < 0 ) ) {
         FD_LOG_WARNING(( "epoll_create1(EPOLL_CLOEXEC) failed (%i-%s)",
                          errno, fd_io_strerror( errno ) ));
-        return;
     }
 
     /* Configure epoll instance event settings for edge triggered mode */
@@ -294,8 +293,6 @@ fd_xsk_setup_poll( fd_xsk_t *              xsk,
     if( FD_UNLIKELY( 0!=epoll_ctl( xsk->epoll_fd, EPOLL_CTL_ADD, xsk->xsk_fd, &event_param ) ) ) {
         FD_LOG_WARNING(( "epoll_ctl(xsk->epoll_fd, EPOLL_CTL_ADD, xsk->xsk_fd, &event_param) failed (%i-%s)",
                          errno, fd_io_strerror( errno ) ));
-        close( xsk->epoll_fd );
-        return;
     }
 
     /* Configure epoll instance parameters for prefbusy polling.
@@ -309,8 +306,6 @@ fd_xsk_setup_poll( fd_xsk_t *              xsk,
     if( FD_UNLIKELY( 0!=ioctl( xsk->epoll_fd, EPIOCSPARAMS, &epoll_params ) ) ) {
         FD_LOG_WARNING(( "ioctl(xsk->epoll_fd, EPIOCSPARAMS, &epoll_params) failed (%i-%s), switching to less performant fallback softirq based polling, likely due to being on a linux kernel older than v6.13.",
                          errno, fd_io_strerror( errno ) ));
-        close( xsk->epoll_fd );
-        return;
     }
 
     /* Configure napi with netdev if netdev is available (checked
@@ -443,10 +438,13 @@ fd_xsk_init( fd_xsk_t *              xsk,
     }
   }
 
+  /* Delete warnings for merged prefbusy PR */
   if( xsk->napi_id ) {
     FD_LOG_DEBUG(( "Interface %u Queue %u has NAPI ID %u", xsk->if_idx, xsk->if_queue_id, xsk->napi_id ));
+    FD_LOG_WARNING(( "Interface %u Queue %u has NAPI ID %u", xsk->if_idx, xsk->if_queue_id, xsk->napi_id ));
   } else {
     FD_LOG_DEBUG(( "Interface %u Queue %u has unknown NAPI ID", xsk->if_idx, xsk->if_queue_id ));
+    FD_LOG_WARNING(( "Interface %u Queue %u has unknown NAPI ID", xsk->if_idx, xsk->if_queue_id ));
   }
 
   /* If requested, enable preferred busy polling */

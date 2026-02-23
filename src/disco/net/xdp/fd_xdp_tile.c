@@ -1269,7 +1269,7 @@ before_credit( fd_net_ctx_t *      ctx,
   uint       rr_idx = ctx->rr_idx;
   fd_xsk_t * rr_xsk = &ctx->xsk[ rr_idx ];
 
-  if( FD_LIKELY( rr_xsk->prefbusy_poll_enabled ) ) {
+  if( FD_LIKELY( 1 ) ) {
       before_credit_prefbusy( ctx, charge_busy, rr_idx, rr_xsk );
   } else {
       /* fallback polling mode for systems using a linux version < v5.11 */
